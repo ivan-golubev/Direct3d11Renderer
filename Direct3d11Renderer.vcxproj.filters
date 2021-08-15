@@ -12,6 +12,9 @@
     <ClCompile Include="Source\Main.cpp">
       <Filter>Source</Filter>
     </ClCompile>
+    <ClCompile Include="Source\D3DRenderer.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\basic_shaders.hlsl">
@@ -23,6 +26,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Source\stb_image.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\D3DRenderer.h">
       <Filter>Source</Filter>
     </ClInclude>
   </ItemGroup>
