@@ -5,6 +5,10 @@
 #include <windows.h>
 #include <d3d11_1.h>
 #include <d3dcompiler.h>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 #include <assert.h>
 
 /* Good candidates for incapsulation */
@@ -22,6 +26,9 @@ UINT numVerts{ 0 };
 ID3D11VertexShader* vertexShader{ nullptr };
 ID3D11PixelShader* pixelShader{ nullptr };
 
+ID3D11SamplerState* samplerState{ nullptr };
+ID3D11ShaderResourceView* textureView{ nullptr };
+
 static bool WindowResized = false;
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -33,7 +40,9 @@ ID3DBlob* CreateVertexShader();
 int CreatePixelShader();
 int CreateInputLayout(ID3DBlob* vsBlob);
 int CreateVertexBuffer();
+int CreateSamplerState();
 void CheckWindowResize();
+void MainLoop(HWND hwnd);
 
 #define CHECK(func_call){\
 int code = func_call;\
@@ -88,8 +97,14 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance
     CHECK(CreatePixelShader())
     CHECK(CreateInputLayout(vsBlob))
     CHECK(CreateVertexBuffer())
+    CHECK(CreateSamplerState())
 
     // Run the message loop.
+    MainLoop(hwnd);
+    return 0;
+}
+
+void MainLoop(HWND hwnd) {
     MSG msg = { };
     while (GetMessage(&msg, NULL, 0, 0))
     {
@@ -104,7 +119,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance
         RECT winRect;
         GetClientRect(hwnd, &winRect);
         D3D11_VIEWPORT viewport = { 0.0f, 0.0f, (FLOAT)(winRect.right - winRect.left), (FLOAT)(winRect.bottom - winRect.top), 0.0f, 1.0f };
-        
+
         d3d11DeviceContext->RSSetViewports(1, &viewport);
         d3d11DeviceContext->OMSetRenderTargets(1, &d3d11FrameBufferView, nullptr);
         d3d11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
@@ -114,11 +129,13 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance
         d3d11DeviceContext->PSSetShader(pixelShader, nullptr, 0);
         d3d11DeviceContext->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
 
+        d3d11DeviceContext->PSSetShaderResources(0, 1, &textureView);
+        d3d11DeviceContext->PSSetSamplers(0, 1, &samplerState);
+
         d3d11DeviceContext->Draw(numVerts, 0);
 
         d3d11SwapChain->Present(1, 0);
     }
-    return 0;
 }
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -162,8 +179,7 @@ void CheckWindowResize() {
         res = d3d11SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&d3d11FrameBuffer);
         assert(SUCCEEDED(res));
 
-        res = d3d11Device->CreateRenderTargetView(d3d11FrameBuffer, NULL,
-            &d3d11FrameBufferView);
+        res = d3d11Device->CreateRenderTargetView(d3d11FrameBuffer, NULL, &d3d11FrameBufferView);
         assert(SUCCEEDED(res));
         d3d11FrameBuffer->Release();
 
@@ -283,7 +299,7 @@ int CreateFrameBuffer() {
 ID3DBlob* CreateVertexShader() {
     ID3DBlob* vsBlob;
     ID3DBlob* shaderCompileErrorsBlob;
-    HRESULT hResult = D3DCompileFromFile(L"Shaders/basic_shaders.hlsl", nullptr, nullptr, "vs_main", "vs_5_0", 0, 0, &vsBlob, &shaderCompileErrorsBlob);
+    HRESULT hResult = D3DCompileFromFile(L"Shaders/textured_surface.hlsl", nullptr, nullptr, "vs_main", "vs_5_0", 0, 0, &vsBlob, &shaderCompileErrorsBlob);
     if (FAILED(hResult))
     {
         const char* errorString = NULL;
@@ -305,7 +321,7 @@ ID3DBlob* CreateVertexShader() {
 int CreatePixelShader() {
     ID3DBlob* psBlob;
     ID3DBlob* shaderCompileErrorsBlob;
-    HRESULT hResult = D3DCompileFromFile(L"Shaders/basic_shaders.hlsl", nullptr, nullptr, "ps_main", "ps_5_0", 0, 0, &psBlob, &shaderCompileErrorsBlob);
+    HRESULT hResult = D3DCompileFromFile(L"Shaders/textured_surface.hlsl", nullptr, nullptr, "ps_main", "ps_5_0", 0, 0, &psBlob, &shaderCompileErrorsBlob);
     if (FAILED(hResult))
     {
         const char* errorString = NULL;
@@ -329,7 +345,7 @@ int CreateInputLayout(ID3DBlob* vsBlob) {
     D3D11_INPUT_ELEMENT_DESC inputElementDesc[] =
     {
         { "POS", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
-        { "COL", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+        { "TEX", 0, DXGI_FORMAT_R32G32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
     };
     HRESULT hResult = d3d11Device->CreateInputLayout(
         inputElementDesc,
@@ -344,12 +360,15 @@ int CreateInputLayout(ID3DBlob* vsBlob) {
 }
 
 int CreateVertexBuffer() {
-    float vertexData[] = { // x, y, r, g, b, a
-        0.0f,  0.5f, 0.f, 1.f, 0.f, 1.f,
-        0.5f, -0.5f, 1.f, 0.f, 0.f, 1.f,
-        -0.5f, -0.5f, 0.f, 0.f, 1.f, 1.f
+    float vertexData[] = { // x, y, u, v
+        -0.5f,  0.5f, 0.f, 0.f,
+        0.5f, -0.5f, 1.f, 1.f,
+        -0.5f, -0.5f, 0.f, 1.f,
+        -0.5f,  0.5f, 0.f, 0.f,
+        0.5f,  0.5f, 1.f, 0.f,
+        0.5f, -0.5f, 1.f, 1.f
     };
-    stride = 6 * sizeof(float);
+    stride = 4 * sizeof(float);
     offset = 0;
     numVerts = sizeof(vertexData) / stride;
 
@@ -361,6 +380,62 @@ int CreateVertexBuffer() {
 
     HRESULT hResult = d3d11Device->CreateBuffer(&vertexBufferDesc, &vertexSubresourceData, &vertexBuffer);
     assert(SUCCEEDED(hResult));
+
+    return 0;
+}
+
+int CreateSamplerState() {
+    {
+        D3D11_SAMPLER_DESC samplerDesc = {};
+        samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+        samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+        samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+        samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+        samplerDesc.BorderColor[0] = 1.0f;
+        samplerDesc.BorderColor[1] = 1.0f;
+        samplerDesc.BorderColor[2] = 1.0f;
+        samplerDesc.BorderColor[3] = 1.0f;
+        samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+
+        HRESULT hResult = d3d11Device->CreateSamplerState(&samplerDesc, &samplerState);
+        assert(SUCCEEDED(hResult));
+    }
+    {
+        // Load Image
+        int texWidth, texHeight, texNumChannels;
+        int texForceNumChannels = 4;
+        unsigned char* inputTextureBytes = stbi_load(
+            "Textures/texture1.png",
+            &texWidth,
+            &texHeight,
+            &texNumChannels,
+            texForceNumChannels
+        );
+        assert(inputTextureBytes);
+        int texBytesPerRow = 4 * texWidth;
+
+        // Create Texture
+        D3D11_TEXTURE2D_DESC textureDesc = {};
+        textureDesc.Width = texWidth;
+        textureDesc.Height = texHeight;
+        textureDesc.MipLevels = 1;
+        textureDesc.ArraySize = 1;
+        textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        textureDesc.SampleDesc.Count = 1;
+        textureDesc.Usage = D3D11_USAGE_IMMUTABLE;
+        textureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+        D3D11_SUBRESOURCE_DATA textureSubresourceData = {};
+        textureSubresourceData.pSysMem = inputTextureBytes;
+        textureSubresourceData.SysMemPitch = texBytesPerRow;
+
+        ID3D11Texture2D* texture;
+        HRESULT hResult = d3d11Device->CreateTexture2D(&textureDesc, &textureSubresourceData, &texture);
+        assert(SUCCEEDED(hResult));
+
+        d3d11Device->CreateShaderResourceView(texture, nullptr, &textureView);
+        free(inputTextureBytes);
+    }
 
     return 0;
 }
