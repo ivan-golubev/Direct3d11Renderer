@@ -6,6 +6,8 @@
 #include "D3DRenderer.h"
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+void MainLoop();
+
 awesome::D3DRenderer renderer{};
 
 int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance*/, _In_ LPWSTR /*lpCmdLine*/, _In_ int nShowCmd)
@@ -48,9 +50,8 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance
     }
 
     ShowWindow(windowHandle, nShowCmd);
-
     renderer.Init(windowHandle);
-    renderer.MainLoop();
+    MainLoop();
     return 0;
 }
 
@@ -82,4 +83,28 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         result = DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
     return result;
+}
+
+void MainLoop() {
+    MSG msg = { };
+
+    long currentTime = 0;
+    LARGE_INTEGER Frequency;
+    if (!QueryPerformanceFrequency(&Frequency))
+        exit(-1); // Hardware does not support high-res counter
+
+    while (GetMessage(&msg, NULL, 0, 0))
+    {
+        unsigned long long dt{0};
+        {
+            unsigned long long prevTime = currentTime;
+            LARGE_INTEGER perfCount;
+            QueryPerformanceCounter(&perfCount);
+            currentTime = perfCount.QuadPart;
+            dt = (currentTime - prevTime) * 1000ULL / Frequency.QuadPart;
+        }
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+        renderer.Render(dt);
+    }
 }

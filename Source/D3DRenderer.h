@@ -22,7 +22,7 @@ namespace awesome {
 	public:
 		void Init(HWND windowHandle);
 		void SetWindowsResized(bool value) { windowResized = value; };
-		void MainLoop();
+		void Render(unsigned long long deltaTimeMs);
 
 	private:
 		int RegisterDirect3DDevice();
