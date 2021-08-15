@@ -4,6 +4,7 @@
 
 #include <windows.h>
 #include <d3d11_1.h>
+#include <d3dcompiler.h>
 #include <assert.h>
 
 /* Good candidates for incapsulation */
@@ -12,11 +13,27 @@ ID3D11DeviceContext1* d3d11DeviceContext{ nullptr };
 IDXGISwapChain1* d3d11SwapChain{ nullptr };
 ID3D11RenderTargetView* d3d11FrameBufferView{ nullptr };
 
+ID3D11InputLayout* inputLayout{ nullptr };
+ID3D11Buffer* vertexBuffer{ nullptr };
+UINT stride{ 0 }; // TODO: incapsulate along with the vertex buffer
+UINT offset{ 0 };
+UINT numVerts{ 0 };
+
+ID3D11VertexShader* vertexShader{ nullptr };
+ID3D11PixelShader* pixelShader{ nullptr };
+
+static bool WindowResized = false;
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 int RegisterDirect3DDevice();
 void SetupDebugLayer();
 int CreateSwapChain(HWND hwnd);
 int CreateFrameBuffer();
+ID3DBlob* CreateVertexShader();
+int CreatePixelShader();
+int CreateInputLayout(ID3DBlob* vsBlob);
+int CreateVertexBuffer();
+void CheckWindowResize();
 
 #define CHECK(func_call){\
 int code = func_call;\
@@ -67,6 +84,10 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance
     CHECK(RegisterDirect3DDevice())
     CHECK(CreateSwapChain(hwnd))
     CHECK(CreateFrameBuffer())
+    ID3DBlob* vsBlob = CreateVertexShader();
+    CHECK(CreatePixelShader())
+    CHECK(CreateInputLayout(vsBlob))
+    CHECK(CreateVertexBuffer())
 
     // Run the message loop.
     MSG msg = { };
@@ -75,8 +96,25 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance
         TranslateMessage(&msg);
         DispatchMessage(&msg);
 
+        CheckWindowResize();
+
         FLOAT backgroundColor[4] = { 0.1f, 0.2f, 0.6f, 1.0f };
         d3d11DeviceContext->ClearRenderTargetView(d3d11FrameBufferView, backgroundColor);
+
+        RECT winRect;
+        GetClientRect(hwnd, &winRect);
+        D3D11_VIEWPORT viewport = { 0.0f, 0.0f, (FLOAT)(winRect.right - winRect.left), (FLOAT)(winRect.bottom - winRect.top), 0.0f, 1.0f };
+        
+        d3d11DeviceContext->RSSetViewports(1, &viewport);
+        d3d11DeviceContext->OMSetRenderTargets(1, &d3d11FrameBufferView, nullptr);
+        d3d11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        d3d11DeviceContext->IASetInputLayout(inputLayout);
+
+        d3d11DeviceContext->VSSetShader(vertexShader, nullptr, 0);
+        d3d11DeviceContext->PSSetShader(pixelShader, nullptr, 0);
+        d3d11DeviceContext->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+
+        d3d11DeviceContext->Draw(numVerts, 0);
 
         d3d11SwapChain->Present(1, 0);
     }
@@ -100,10 +138,37 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         EndPaint(hwnd, &ps);
         break;
     }
+    case WM_SIZE:
+    {
+        WindowResized = true;
+        break;
+    }
     default:
         result = DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
     return result;
+}
+
+void CheckWindowResize() {
+    if (WindowResized)
+    {
+        d3d11DeviceContext->OMSetRenderTargets(0, 0, 0);
+        d3d11FrameBufferView->Release();
+
+        HRESULT res = d3d11SwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
+        assert(SUCCEEDED(res));
+
+        ID3D11Texture2D* d3d11FrameBuffer;
+        res = d3d11SwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&d3d11FrameBuffer);
+        assert(SUCCEEDED(res));
+
+        res = d3d11Device->CreateRenderTargetView(d3d11FrameBuffer, NULL,
+            &d3d11FrameBufferView);
+        assert(SUCCEEDED(res));
+        d3d11FrameBuffer->Release();
+
+        WindowResized = false;
+    }
 }
 
 int RegisterDirect3DDevice() {
@@ -212,5 +277,90 @@ int CreateFrameBuffer() {
     hResult = d3d11Device->CreateRenderTargetView(d3d11FrameBuffer, 0, &d3d11FrameBufferView);
     assert(SUCCEEDED(hResult));
     d3d11FrameBuffer->Release();
+    return 0;
+}
+
+ID3DBlob* CreateVertexShader() {
+    ID3DBlob* vsBlob;
+    ID3DBlob* shaderCompileErrorsBlob;
+    HRESULT hResult = D3DCompileFromFile(L"Shaders/basic_shaders.hlsl", nullptr, nullptr, "vs_main", "vs_5_0", 0, 0, &vsBlob, &shaderCompileErrorsBlob);
+    if (FAILED(hResult))
+    {
+        const char* errorString = NULL;
+        if (hResult == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND))
+            errorString = "Could not compile shader; file not found";
+        else if (shaderCompileErrorsBlob) {
+            errorString = (const char*)shaderCompileErrorsBlob->GetBufferPointer();
+            shaderCompileErrorsBlob->Release();
+        }
+        MessageBoxA(0, errorString, "Shader Compiler Error", MB_ICONERROR | MB_OK);
+        return nullptr;
+    }
+
+    hResult = d3d11Device->CreateVertexShader(vsBlob->GetBufferPointer(), vsBlob->GetBufferSize(), nullptr, &vertexShader);
+    assert(SUCCEEDED(hResult));
+    return vsBlob;
+}
+
+int CreatePixelShader() {
+    ID3DBlob* psBlob;
+    ID3DBlob* shaderCompileErrorsBlob;
+    HRESULT hResult = D3DCompileFromFile(L"Shaders/basic_shaders.hlsl", nullptr, nullptr, "ps_main", "ps_5_0", 0, 0, &psBlob, &shaderCompileErrorsBlob);
+    if (FAILED(hResult))
+    {
+        const char* errorString = NULL;
+        if (hResult == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND))
+            errorString = "Could not compile shader; file not found";
+        else if (shaderCompileErrorsBlob) {
+            errorString = (const char*)shaderCompileErrorsBlob->GetBufferPointer();
+            shaderCompileErrorsBlob->Release();
+        }
+        MessageBoxA(0, errorString, "Shader Compiler Error", MB_ICONERROR | MB_OK);
+        return 1;
+    }
+
+    hResult = d3d11Device->CreatePixelShader(psBlob->GetBufferPointer(), psBlob->GetBufferSize(), nullptr, &pixelShader);
+    assert(SUCCEEDED(hResult));
+    psBlob->Release();
+    return 0;
+}
+
+int CreateInputLayout(ID3DBlob* vsBlob) {
+    D3D11_INPUT_ELEMENT_DESC inputElementDesc[] =
+    {
+        { "POS", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0 },
+        { "COL", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, D3D11_APPEND_ALIGNED_ELEMENT, D3D11_INPUT_PER_VERTEX_DATA, 0 }
+    };
+    HRESULT hResult = d3d11Device->CreateInputLayout(
+        inputElementDesc,
+        ARRAYSIZE(inputElementDesc),
+        vsBlob->GetBufferPointer(),
+        vsBlob->GetBufferSize(),
+        &inputLayout
+    );
+    assert(SUCCEEDED(hResult));
+    vsBlob->Release();
+    return 0;
+}
+
+int CreateVertexBuffer() {
+    float vertexData[] = { // x, y, r, g, b, a
+        0.0f,  0.5f, 0.f, 1.f, 0.f, 1.f,
+        0.5f, -0.5f, 1.f, 0.f, 0.f, 1.f,
+        -0.5f, -0.5f, 0.f, 0.f, 1.f, 1.f
+    };
+    stride = 6 * sizeof(float);
+    offset = 0;
+    numVerts = sizeof(vertexData) / stride;
+
+    D3D11_BUFFER_DESC vertexBufferDesc = {};
+    vertexBufferDesc.ByteWidth = sizeof(vertexData);
+    vertexBufferDesc.Usage = D3D11_USAGE_IMMUTABLE;
+    vertexBufferDesc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    D3D11_SUBRESOURCE_DATA vertexSubresourceData = { vertexData };
+
+    HRESULT hResult = d3d11Device->CreateBuffer(&vertexBufferDesc, &vertexSubresourceData, &vertexBuffer);
+    assert(SUCCEEDED(hResult));
+
     return 0;
 }
