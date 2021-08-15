@@ -31,5 +31,8 @@
     <ClInclude Include="Source\D3DRenderer.h">
       <Filter>Source</Filter>
     </ClInclude>
+    <ClInclude Include="Source\3DMaths.h">
+      <Filter>Source</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

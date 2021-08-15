@@ -173,6 +173,7 @@
     </FxCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Source\3DMaths.h" />
     <ClInclude Include="Source\D3DRenderer.h" />
     <ClInclude Include="Source\stb_image.h" />
   </ItemGroup>

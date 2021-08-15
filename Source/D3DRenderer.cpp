@@ -6,9 +6,17 @@
 #include <assert.h>
 
 #define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+#include "stb_image.h"
+#include "3DMaths.h"
 
 namespace awesome {
+
+    struct Constants
+    {
+        float2 pos;
+        float2 paddingUnused; // color (below) needs to be 16-byte aligned! 
+        float4 color;
+    };
 
     void D3DRenderer::Init(HWND windowHandle) {
         this->windowHandle = windowHandle;
@@ -20,6 +28,7 @@ namespace awesome {
         CreateInputLayout(vsBlob);
         CreateVertexBuffer();
         CreateSamplerState();
+        CreateConstantBuffer();
     }
 
     void D3DRenderer::MainLoop() {
@@ -31,6 +40,14 @@ namespace awesome {
 
             CheckWindowResize();
 
+            {
+                D3D11_MAPPED_SUBRESOURCE mappedSubresource;
+                d3d11DeviceContext->Map(constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
+                Constants* constants = (Constants*)(mappedSubresource.pData);
+                constants->pos = { 0.25f, 0.3f };
+                constants->color = { 0.7f, 0.0f, 0.0f, 1.f };
+                d3d11DeviceContext->Unmap(constantBuffer, 0);
+            }
             FLOAT backgroundColor[4] = { 0.1f, 0.2f, 0.6f, 1.0f };
             d3d11DeviceContext->ClearRenderTargetView(d3d11FrameBufferView, backgroundColor);
 
@@ -45,6 +62,7 @@ namespace awesome {
 
             d3d11DeviceContext->VSSetShader(vertexShader, nullptr, 0);
             d3d11DeviceContext->PSSetShader(pixelShader, nullptr, 0);
+            d3d11DeviceContext->VSSetConstantBuffers(0, 1, &constantBuffer);
             d3d11DeviceContext->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
 
             d3d11DeviceContext->PSSetShaderResources(0, 1, &textureView);
@@ -333,6 +351,19 @@ namespace awesome {
             d3d11Device->CreateShaderResourceView(texture, nullptr, &textureView);
             free(inputTextureBytes);
         }
+
+        return 0;
+    }
+
+    int D3DRenderer::CreateConstantBuffer() {
+        D3D11_BUFFER_DESC constantBufferDesc = {};
+        constantBufferDesc.ByteWidth = sizeof(Constants);
+        constantBufferDesc.Usage = D3D11_USAGE_DYNAMIC;
+        constantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        constantBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+        HRESULT hResult = d3d11Device->CreateBuffer(&constantBufferDesc, nullptr, &constantBuffer);
+        assert(SUCCEEDED(hResult));
 
         return 0;
     }

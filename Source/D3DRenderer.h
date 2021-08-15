@@ -34,6 +34,7 @@ namespace awesome {
 		int CreateInputLayout(ID3DBlob* vsBlob);
 		int CreateVertexBuffer();
 		int CreateSamplerState();
+		int CreateConstantBuffer();
 		void CheckWindowResize();
 
 		HWND windowHandle{ nullptr };
@@ -53,6 +54,7 @@ namespace awesome {
 
 		ID3D11SamplerState* samplerState{ nullptr };
 		ID3D11ShaderResourceView* textureView{ nullptr };
+		ID3D11Buffer* constantBuffer{ nullptr };
 
 		bool windowResized{ false };
 	};
