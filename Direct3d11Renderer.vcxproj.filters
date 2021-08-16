@@ -15,6 +15,12 @@
     <ClCompile Include="Source\D3DRenderer.cpp">
       <Filter>Source</Filter>
     </ClCompile>
+    <ClCompile Include="Source\InputManager.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\GameManager.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\basic_shaders.hlsl">
@@ -32,6 +38,12 @@
       <Filter>Source</Filter>
     </ClInclude>
     <ClInclude Include="Source\3DMaths.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\InputManager.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\GameManager.h">
       <Filter>Source</Filter>
     </ClInclude>
   </ItemGroup>

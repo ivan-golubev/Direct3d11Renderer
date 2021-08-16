@@ -1,15 +1,17 @@
 #include <combaseapi.h>
+#include <corecrt_math_defines.h>
+#include "3DMaths.h"
 
-class ID3D11Device1;
-class ID3D11DeviceContext1;
-class IDXGISwapChain1;
-class ID3D11RenderTargetView;
-class ID3D11InputLayout;
-class ID3D11Buffer;
-class ID3D11VertexShader;
-class ID3D11PixelShader;
-class ID3D11SamplerState;
-class ID3D11ShaderResourceView;
+struct ID3D11Device1;
+struct ID3D11DeviceContext1;
+struct IDXGISwapChain1;
+struct ID3D11RenderTargetView;
+struct ID3D11InputLayout;
+struct ID3D11Buffer;
+struct ID3D11VertexShader;
+struct ID3D11PixelShader;
+struct ID3D11SamplerState;
+struct ID3D11ShaderResourceView;
 
 // Forward declaring ID3DBlob
 struct ID3D10Blob;
@@ -18,9 +20,12 @@ typedef ID3D10Blob ID3DBlob;
 
 namespace awesome { 
 
+	class GameManager;
+	class InputManager;
+
 	class D3DRenderer {
 	public:
-		void Init(HWND windowHandle);
+		void Init(HWND windowHandle, GameManager* gm, InputManager* im);
 		void SetWindowsResized(bool value) { windowResized = value; };
 		void Render(unsigned long long deltaTimeMs);
 
@@ -57,5 +62,13 @@ namespace awesome {
 		ID3D11Buffer* constantBuffer{ nullptr };
 
 		bool windowResized{ false };
+		
+		/* TODO: this is definitely not the right place for these members: */
+		float const colorCycleFreq { 2000.0f };
+
+		GameManager* gameManager;
+		InputManager* inputManager;
+		float2 playerPos{ 0.0f, 0.0f };
+		float4 playerColor{};
 	};
 }

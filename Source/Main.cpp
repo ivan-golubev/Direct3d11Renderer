@@ -3,12 +3,16 @@
 #endif // !UNICODE
 
 #include <windows.h>
+#include "GameManager.h"
 #include "D3DRenderer.h"
+#include "InputManager.h"
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void MainLoop();
 
+awesome::GameManager gameManager{};
 awesome::D3DRenderer renderer{};
+awesome::InputManager inputManager{};
 
 int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance*/, _In_ LPWSTR /*lpCmdLine*/, _In_ int nShowCmd)
 {
@@ -50,7 +54,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance
     }
 
     ShowWindow(windowHandle, nShowCmd);
-    renderer.Init(windowHandle);
+    renderer.Init(windowHandle, &gameManager, &inputManager);
     MainLoop();
     return 0;
 }
@@ -79,6 +83,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
         renderer.SetWindowsResized(true);
         break;
     }
+    case WM_KEYDOWN:
+    case WM_KEYUP:
+        if (wParam == VK_ESCAPE)
+            DestroyWindow(hwnd);
+        else
+            inputManager.OnWindowMessage(uMsg, wParam);
     default:
         result = DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
@@ -88,23 +98,21 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 void MainLoop() {
     MSG msg = { };
 
-    long currentTime = 0;
-    LARGE_INTEGER Frequency;
-    if (!QueryPerformanceFrequency(&Frequency))
-        exit(-1); // Hardware does not support high-res counter
+    unsigned long long dt{ 0 };
 
-    while (GetMessage(&msg, NULL, 0, 0))
+    bool isRunning = true;
+    while (isRunning)
     {
-        unsigned long long dt{0};
+        dt = gameManager.CalculateDeltaTimeMs();
+
+        MSG msg = {};
+        while (PeekMessageW(&msg, 0, 0, 0, PM_REMOVE))
         {
-            unsigned long long prevTime = currentTime;
-            LARGE_INTEGER perfCount;
-            QueryPerformanceCounter(&perfCount);
-            currentTime = perfCount.QuadPart;
-            dt = (currentTime - prevTime) * 1000ULL / Frequency.QuadPart;
+            if (msg.message == WM_QUIT)
+                isRunning = false;
+            TranslateMessage(&msg);
+            DispatchMessage(&msg);
         }
-        TranslateMessage(&msg);
-        DispatchMessage(&msg);
         renderer.Render(dt);
     }
 }

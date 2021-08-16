@@ -7,7 +7,8 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
-#include "3DMaths.h"
+#include "GameManager.h"
+#include "InputManager.h"
 
 namespace awesome {
 
@@ -18,8 +19,10 @@ namespace awesome {
         float4 color;
     };
 
-    void D3DRenderer::Init(HWND windowHandle) {
+    void D3DRenderer::Init(HWND windowHandle, GameManager* gameManager, InputManager* inputManager) {
         this->windowHandle = windowHandle;
+        this->gameManager = gameManager;
+        this->inputManager = inputManager;
         RegisterDirect3DDevice();
         CreateSwapChain();
         CreateFrameBuffer();
@@ -32,14 +35,31 @@ namespace awesome {
     }
 
     void D3DRenderer::Render(unsigned long long deltaTimeMs) {
-        CheckWindowResize();
-
+        CheckWindowResize();        
+        {
+            float const speedDelta = inputManager->GetPlayerSpeed(deltaTimeMs);
+            if (inputManager->IsKeyDown(InputAction::MoveUp))
+                playerPos.y += speedDelta;
+            if (inputManager->IsKeyDown(InputAction::MoveDown))
+                playerPos.y -= speedDelta;
+            if (inputManager->IsKeyDown(InputAction::MoveLeft))
+                playerPos.x -= speedDelta;
+            if (inputManager->IsKeyDown(InputAction::MoveRight))
+                playerPos.x += speedDelta;
+        }
+        {
+            float sinTime = sinf(colorCycleFreq * gameManager->GetCurrentTimeSec());
+            playerColor.x = 0.5f * (sinTime + 1);
+            playerColor.y = 1 - playerColor.x;
+            playerColor.z = 0.f;
+            playerColor.w = 1.0f;
+        }
         {
             D3D11_MAPPED_SUBRESOURCE mappedSubresource;
             d3d11DeviceContext->Map(constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
             Constants* constants = (Constants*)(mappedSubresource.pData);
-            constants->pos = { 0.25f, 0.3f };
-            constants->color = { 0.7f, 0.0f, 0.0f, 1.f };
+            constants->pos = playerPos;
+            constants->color = playerColor;
             d3d11DeviceContext->Unmap(constantBuffer, 0);
         }
         FLOAT backgroundColor[4] = { 0.1f, 0.2f, 0.6f, 1.0f };
