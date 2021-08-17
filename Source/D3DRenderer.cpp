@@ -7,7 +7,7 @@
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
-#include "GameManager.h"
+#include "TimeManager.h"
 #include "InputManager.h"
 
 namespace awesome {
@@ -19,9 +19,9 @@ namespace awesome {
         float4 color;
     };
 
-    void D3DRenderer::Init(HWND windowHandle, GameManager* gameManager, InputManager* inputManager) {
+    void D3DRenderer::Init(HWND windowHandle, TimeManager* timeManager, InputManager* inputManager) {
         this->windowHandle = windowHandle;
-        this->gameManager = gameManager;
+        this->timeManager = timeManager;
         this->inputManager = inputManager;
         RegisterDirect3DDevice();
         CreateSwapChain();
@@ -48,7 +48,7 @@ namespace awesome {
                 playerPos.x += speedDelta;
         }
         {
-            float sinTime = sinf(colorCycleFreq * gameManager->GetCurrentTimeSec());
+            float sinTime = sinf(colorCycleFreq * timeManager->GetCurrentTimeSec());
             playerColor.x = 0.5f * (sinTime + 1);
             playerColor.y = 1 - playerColor.x;
             playerColor.z = 0.f;

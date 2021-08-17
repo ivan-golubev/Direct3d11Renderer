@@ -3,14 +3,14 @@
 #endif // !UNICODE
 
 #include <windows.h>
-#include "GameManager.h"
+#include "TimeManager.h"
 #include "D3DRenderer.h"
 #include "InputManager.h"
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void MainLoop();
 
-awesome::GameManager gameManager{};
+awesome::TimeManager timeManager{};
 awesome::D3DRenderer renderer{};
 awesome::InputManager inputManager{};
 
@@ -54,7 +54,7 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance
     }
 
     ShowWindow(windowHandle, nShowCmd);
-    renderer.Init(windowHandle, &gameManager, &inputManager);
+    renderer.Init(windowHandle, &timeManager, &inputManager);
     MainLoop();
     return 0;
 }
@@ -103,7 +103,7 @@ void MainLoop() {
     bool isRunning = true;
     while (isRunning)
     {
-        dt = gameManager.CalculateDeltaTimeMs();
+        dt = timeManager.Tick();
 
         MSG msg = {};
         while (PeekMessageW(&msg, 0, 0, 0, PM_REMOVE))

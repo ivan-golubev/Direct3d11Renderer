@@ -20,12 +20,12 @@ typedef ID3D10Blob ID3DBlob;
 
 namespace awesome { 
 
-	class GameManager;
+	class TimeManager;
 	class InputManager;
 
 	class D3DRenderer {
 	public:
-		void Init(HWND windowHandle, GameManager* gm, InputManager* im);
+		void Init(HWND windowHandle, TimeManager* gm, InputManager* im);
 		void SetWindowsResized(bool value) { windowResized = value; };
 		void Render(unsigned long long deltaTimeMs);
 
@@ -66,7 +66,7 @@ namespace awesome {
 		/* TODO: this is definitely not the right place for these members: */
 		float const colorCycleFreq { 2000.0f };
 
-		GameManager* gameManager;
+		TimeManager* timeManager;
 		InputManager* inputManager;
 		float2 playerPos{ 0.0f, 0.0f };
 		float4 playerColor{};

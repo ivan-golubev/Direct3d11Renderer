@@ -2,10 +2,10 @@
 
 namespace awesome {
 
-	class GameManager {
+	class TimeManager {
 	public:
-		GameManager();
-		unsigned long long CalculateDeltaTimeMs();
+		TimeManager();
+		unsigned long long Tick();
 		unsigned long long GetCurrentTimeTicks() const;
 		unsigned long long GetCurrentTimeMs() const;
 		float GetCurrentTimeSec() const;
