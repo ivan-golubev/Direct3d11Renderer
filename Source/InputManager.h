@@ -3,10 +3,16 @@
 namespace awesome {
 
 	enum InputAction {
-		MoveUp,
-		MoveDown,
-		MoveLeft,
-		MoveRight,
+		RaiseCamera,
+		LowerCamera,
+		MoveCameraLeft,
+		MoveCameraRight,
+		MoveCameraForward,
+		MoveCameraBack,
+		TurnCameraLeft,
+		TurnCameraRight,
+		LookCameraUp,
+		LookCameraDown,
 		Count
 	};
 

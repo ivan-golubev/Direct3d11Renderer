@@ -12,6 +12,7 @@ struct ID3D11VertexShader;
 struct ID3D11PixelShader;
 struct ID3D11SamplerState;
 struct ID3D11ShaderResourceView;
+struct ID3D11RasterizerState;
 
 // Forward declaring ID3DBlob
 struct ID3D10Blob;
@@ -22,10 +23,11 @@ namespace awesome {
 
 	class TimeManager;
 	class InputManager;
+	class Camera;
 
 	class D3DRenderer {
 	public:
-		void Init(HWND windowHandle, TimeManager* gm, InputManager* im);
+		void Init(HWND windowHandle, TimeManager* gm, InputManager* im, Camera* c);
 		void SetWindowsResized(bool value) { windowResized = value; };
 		void Render(unsigned long long deltaTimeMs);
 
@@ -38,8 +40,10 @@ namespace awesome {
 		int CreatePixelShader();
 		int CreateInputLayout(ID3DBlob* vsBlob);
 		int CreateVertexBuffer();
+		int LoadTextures();
 		int CreateSamplerState();
 		int CreateConstantBuffer();
+		int CreateRasterizerState();
 		void CheckWindowResize();
 
 		HWND windowHandle{ nullptr };
@@ -47,6 +51,7 @@ namespace awesome {
 		ID3D11DeviceContext1* d3d11DeviceContext{ nullptr };
 		IDXGISwapChain1* d3d11SwapChain{ nullptr };
 		ID3D11RenderTargetView* d3d11FrameBufferView{ nullptr };
+		ID3D11RasterizerState* rasterizerState{ nullptr };
 
 		ID3D11InputLayout* inputLayout{ nullptr };
 		ID3D11Buffer* vertexBuffer{ nullptr };
@@ -61,14 +66,10 @@ namespace awesome {
 		ID3D11ShaderResourceView* textureView{ nullptr };
 		ID3D11Buffer* constantBuffer{ nullptr };
 
-		bool windowResized{ false };
-		
-		/* TODO: this is definitely not the right place for these members: */
-		float const colorCycleFreq { 2000.0f };
+		bool windowResized{ true };
 
-		TimeManager* timeManager;
-		InputManager* inputManager;
-		float2 playerPos{ 0.0f, 0.0f };
-		float4 playerColor{};
+		TimeManager* timeManager{ nullptr };
+		InputManager* inputManager{ nullptr };
+		Camera* camera{ nullptr };
 	};
 }

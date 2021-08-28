@@ -1,6 +1,7 @@
 #include "TimeManager.h"
 #include <windows.h>
 #include <cstdlib>
+#include <algorithm>
 
 namespace awesome {
 
@@ -8,28 +9,36 @@ namespace awesome {
 		LARGE_INTEGER Frequency;
 		if (!QueryPerformanceFrequency(&Frequency))
 			exit(-1); // Hardware does not support high-res counter
-		timerFrequency = Frequency.QuadPart;
+		ticksPerSec = Frequency.QuadPart;
+
+		LARGE_INTEGER perfCount;
+		QueryPerformanceCounter(&perfCount);
+		startTimeTicks = currentTimeTicks = perfCount.QuadPart;
 	}
 
 	unsigned long long TimeManager::Tick() {
-		unsigned long long prevTime = currentTime;
+		unsigned long long prevTimeTicks = currentTimeTicks;
 		LARGE_INTEGER perfCount;
 		QueryPerformanceCounter(&perfCount);
-		currentTime = perfCount.QuadPart;
-		unsigned long long dt = (currentTime - prevTime) * 1000ULL / timerFrequency;
-		return dt;
+		currentTimeTicks = perfCount.QuadPart;
+		unsigned long long deltaMs = (currentTimeTicks - prevTimeTicks) / ticksPerSec;
+		//deltaMs = std::max(deltaMs, 7ULL); /* make sure the first frame is at least 7 ms (144 FPS) */
+		return deltaMs;
 	}
 
 	unsigned long long TimeManager::GetCurrentTimeTicks() const { 
-		return currentTime;
+		return currentTimeTicks - startTimeTicks;
 	}
 
 	unsigned long long TimeManager::GetCurrentTimeMs() const { 
-		return currentTime / timerFrequency;
+		return GetCurrentTimeTicks() * 1000ULL / ticksPerSec;
 	}
 
 	float TimeManager::GetCurrentTimeSec() const { 
-		return static_cast<float> (currentTime / (timerFrequency * 1000.0f));
+		unsigned long long ticks = GetCurrentTimeTicks();
+		float elapsedMS = ticks * 1000ULL / ticksPerSec;
+		float elapsedSec = static_cast<float> (ticks / ticksPerSec);
+		return static_cast<float> (GetCurrentTimeTicks() / ticksPerSec);
 	}
 
 } // namespace awesome

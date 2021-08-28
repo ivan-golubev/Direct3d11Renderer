@@ -18,7 +18,10 @@
     <ClCompile Include="Source\InputManager.cpp">
       <Filter>Source</Filter>
     </ClCompile>
-    <ClCompile Include="Source\GameManager.cpp">
+    <ClCompile Include="Source\TimeManager.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="Source\Camera.cpp">
       <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>
@@ -43,7 +46,10 @@
     <ClInclude Include="Source\InputManager.h">
       <Filter>Source</Filter>
     </ClInclude>
-    <ClInclude Include="Source\GameManager.h">
+    <ClInclude Include="Source\TimeManager.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Camera.h">
       <Filter>Source</Filter>
     </ClInclude>
   </ItemGroup>

@@ -10,8 +10,9 @@ namespace awesome {
 		unsigned long long GetCurrentTimeMs() const;
 		float GetCurrentTimeSec() const;
 	private:
-		unsigned long long timerFrequency{0};
-		unsigned long long currentTime{0}; // in ticks
+		unsigned long long ticksPerSec{0};
+		unsigned long long currentTimeTicks{0};
+		unsigned long long startTimeTicks{ 0 };
 	};
 
 } // awesome

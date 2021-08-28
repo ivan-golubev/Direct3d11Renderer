@@ -4,62 +4,54 @@
 #include <d3d11_1.h>
 #include <d3dcompiler.h>
 #include <assert.h>
+#include <string>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "TimeManager.h"
 #include "InputManager.h"
+#include "Camera.h"
 
 namespace awesome {
 
+    /* elements need to be 16-byte aligned */
     struct Constants
     {
-        float2 pos;
-        float2 paddingUnused; // color (below) needs to be 16-byte aligned! 
-        float4 color;
+        float4x4 modelViewProj;
     };
 
-    void D3DRenderer::Init(HWND windowHandle, TimeManager* timeManager, InputManager* inputManager) {
+    void D3DRenderer::Init(HWND windowHandle, TimeManager* timeManager, InputManager* inputManager, Camera* camera) {
         this->windowHandle = windowHandle;
         this->timeManager = timeManager;
         this->inputManager = inputManager;
+        this->camera = camera;
         RegisterDirect3DDevice();
+        SetupDebugLayer();
         CreateSwapChain();
         CreateFrameBuffer();
         ID3DBlob* vsBlob = CreateVertexShader();
         CreatePixelShader();
         CreateInputLayout(vsBlob);
         CreateVertexBuffer();
+        LoadTextures();
         CreateSamplerState();
         CreateConstantBuffer();
+        CreateRasterizerState();
     }
 
     void D3DRenderer::Render(unsigned long long deltaTimeMs) {
-        CheckWindowResize();        
-        {
-            float const speedDelta = inputManager->GetPlayerSpeed(deltaTimeMs);
-            if (inputManager->IsKeyDown(InputAction::MoveUp))
-                playerPos.y += speedDelta;
-            if (inputManager->IsKeyDown(InputAction::MoveDown))
-                playerPos.y -= speedDelta;
-            if (inputManager->IsKeyDown(InputAction::MoveLeft))
-                playerPos.x -= speedDelta;
-            if (inputManager->IsKeyDown(InputAction::MoveRight))
-                playerPos.x += speedDelta;
-        }
-        {
-            float sinTime = sinf(colorCycleFreq * timeManager->GetCurrentTimeSec());
-            playerColor.x = 0.5f * (sinTime + 1);
-            playerColor.y = 1 - playerColor.x;
-            playerColor.z = 0.f;
-            playerColor.w = 1.0f;
-        }
+        //std::string elapsedTimeStr = "elapsed " + std::to_string(deltaTimeMs) + "\n";
+        //OutputDebugStringA(elapsedTimeStr.c_str());
+        CheckWindowResize();
+        camera->UpdateCamera(deltaTimeMs);
+        
+        float4x4 modelMat = rotateYMat(0.2f * static_cast<float>(M_PI * timeManager->GetCurrentTimeSec())); // Spin the quad
+        float4x4 modelViewProj = modelMat * camera->GetViewMatrix() * camera->GetPerspectiveMatrix();
         {
             D3D11_MAPPED_SUBRESOURCE mappedSubresource;
             d3d11DeviceContext->Map(constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mappedSubresource);
             Constants* constants = (Constants*)(mappedSubresource.pData);
-            constants->pos = playerPos;
-            constants->color = playerColor;
+            constants->modelViewProj = modelViewProj;
             d3d11DeviceContext->Unmap(constantBuffer, 0);
         }
         FLOAT backgroundColor[4] = { 0.1f, 0.2f, 0.6f, 1.0f };
@@ -70,12 +62,15 @@ namespace awesome {
         D3D11_VIEWPORT viewport = { 0.0f, 0.0f, (FLOAT)(winRect.right - winRect.left), (FLOAT)(winRect.bottom - winRect.top), 0.0f, 1.0f };
 
         d3d11DeviceContext->RSSetViewports(1, &viewport);
+        d3d11DeviceContext->RSSetState(rasterizerState);
+
         d3d11DeviceContext->OMSetRenderTargets(1, &d3d11FrameBufferView, nullptr);
         d3d11DeviceContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         d3d11DeviceContext->IASetInputLayout(inputLayout);
 
         d3d11DeviceContext->VSSetShader(vertexShader, nullptr, 0);
         d3d11DeviceContext->PSSetShader(pixelShader, nullptr, 0);
+
         d3d11DeviceContext->VSSetConstantBuffers(0, 1, &constantBuffer);
         d3d11DeviceContext->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
 
@@ -104,6 +99,17 @@ namespace awesome {
             assert(SUCCEEDED(res));
             d3d11FrameBuffer->Release();
 
+            // Get window dimensions
+            int windowWidth, windowHeight;
+            float windowAspectRatio;
+            {
+                RECT clientRect;
+                GetClientRect(windowHandle, &clientRect);
+                windowWidth = clientRect.right - clientRect.left;
+                windowHeight = clientRect.bottom - clientRect.top;
+                windowAspectRatio = (float)windowWidth / (float)windowHeight;
+                camera->UpdatePerspectiveMatrix(windowAspectRatio);
+            } 
             windowResized = false;
         }
     }
@@ -136,8 +142,6 @@ namespace awesome {
         hResult = baseDeviceContext->QueryInterface(__uuidof(ID3D11DeviceContext1), (void**)&d3d11DeviceContext);
         assert(SUCCEEDED(hResult));
         baseDeviceContext->Release();
-
-        SetupDebugLayer();
         return 0;
     }
 
@@ -313,71 +317,81 @@ namespace awesome {
     }
 
     int D3DRenderer::CreateSamplerState() {
-        {
-            D3D11_SAMPLER_DESC samplerDesc = {};
-            samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
-            samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
-            samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
-            samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
-            samplerDesc.BorderColor[0] = 1.0f;
-            samplerDesc.BorderColor[1] = 1.0f;
-            samplerDesc.BorderColor[2] = 1.0f;
-            samplerDesc.BorderColor[3] = 1.0f;
-            samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+        D3D11_SAMPLER_DESC samplerDesc = {};
+        samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
+        samplerDesc.AddressU = D3D11_TEXTURE_ADDRESS_BORDER;
+        samplerDesc.AddressV = D3D11_TEXTURE_ADDRESS_BORDER;
+        samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_BORDER;
+        samplerDesc.BorderColor[0] = 1.0f;
+        samplerDesc.BorderColor[1] = 1.0f;
+        samplerDesc.BorderColor[2] = 1.0f;
+        samplerDesc.BorderColor[3] = 1.0f;
+        samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 
-            HRESULT hResult = d3d11Device->CreateSamplerState(&samplerDesc, &samplerState);
-            assert(SUCCEEDED(hResult));
-        }
-        {
-            // Load Image
-            int texWidth, texHeight, texNumChannels;
-            int texForceNumChannels = 4;
-            unsigned char* inputTextureBytes = stbi_load(
-                "Textures/texture1.png",
-                &texWidth,
-                &texHeight,
-                &texNumChannels,
-                texForceNumChannels
-            );
-            assert(inputTextureBytes);
-            int texBytesPerRow = 4 * texWidth;
+        HRESULT hResult = d3d11Device->CreateSamplerState(&samplerDesc, &samplerState);
+        assert(SUCCEEDED(hResult));
+        return 0;
+    }
 
-            // Create Texture
-            D3D11_TEXTURE2D_DESC textureDesc = {};
-            textureDesc.Width = texWidth;
-            textureDesc.Height = texHeight;
-            textureDesc.MipLevels = 1;
-            textureDesc.ArraySize = 1;
-            textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
-            textureDesc.SampleDesc.Count = 1;
-            textureDesc.Usage = D3D11_USAGE_IMMUTABLE;
-            textureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    int D3DRenderer::LoadTextures() {
+        // Load Image
+        int texWidth, texHeight, texNumChannels;
+        int texForceNumChannels = 4;
+        unsigned char* inputTextureBytes = stbi_load(
+            "Textures/texture1.png",
+            &texWidth,
+            &texHeight,
+            &texNumChannels,
+            texForceNumChannels
+        );
+        assert(inputTextureBytes);
+        int texBytesPerRow = 4 * texWidth;
 
-            D3D11_SUBRESOURCE_DATA textureSubresourceData = {};
-            textureSubresourceData.pSysMem = inputTextureBytes;
-            textureSubresourceData.SysMemPitch = texBytesPerRow;
+        // Create Texture
+        D3D11_TEXTURE2D_DESC textureDesc = {};
+        textureDesc.Width = texWidth;
+        textureDesc.Height = texHeight;
+        textureDesc.MipLevels = 1;
+        textureDesc.ArraySize = 1;
+        textureDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM_SRGB;
+        textureDesc.SampleDesc.Count = 1;
+        textureDesc.Usage = D3D11_USAGE_IMMUTABLE;
+        textureDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
 
-            ID3D11Texture2D* texture;
-            HRESULT hResult = d3d11Device->CreateTexture2D(&textureDesc, &textureSubresourceData, &texture);
-            assert(SUCCEEDED(hResult));
+        D3D11_SUBRESOURCE_DATA textureSubresourceData = {};
+        textureSubresourceData.pSysMem = inputTextureBytes;
+        textureSubresourceData.SysMemPitch = texBytesPerRow;
 
-            d3d11Device->CreateShaderResourceView(texture, nullptr, &textureView);
-            free(inputTextureBytes);
-        }
+        ID3D11Texture2D* texture;
+        HRESULT hResult = d3d11Device->CreateTexture2D(&textureDesc, &textureSubresourceData, &texture);
+        assert(SUCCEEDED(hResult));
 
+        hResult = d3d11Device->CreateShaderResourceView(texture, nullptr, &textureView);
+        assert(SUCCEEDED(hResult));
+        free(inputTextureBytes);
         return 0;
     }
 
     int D3DRenderer::CreateConstantBuffer() {
         D3D11_BUFFER_DESC constantBufferDesc = {};
-        constantBufferDesc.ByteWidth = sizeof(Constants);
+        constantBufferDesc.ByteWidth = sizeof(Constants) + 0xf & 0xfffffff0;
         constantBufferDesc.Usage = D3D11_USAGE_DYNAMIC;
         constantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         constantBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
         HRESULT hResult = d3d11Device->CreateBuffer(&constantBufferDesc, nullptr, &constantBuffer);
         assert(SUCCEEDED(hResult));
+        return 0;
+    }
 
+    int D3DRenderer::CreateRasterizerState() {
+        D3D11_RASTERIZER_DESC rasterizerDesc = {};
+        rasterizerDesc.FillMode = D3D11_FILL_SOLID;
+        rasterizerDesc.CullMode = D3D11_CULL_NONE;
+        rasterizerDesc.FrontCounterClockwise = TRUE;
+
+        HRESULT hResult = d3d11Device->CreateRasterizerState(&rasterizerDesc, &rasterizerState);
+        assert(SUCCEEDED(hResult));
         return 0;
     }
 
