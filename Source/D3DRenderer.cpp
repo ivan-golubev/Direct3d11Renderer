@@ -4,7 +4,6 @@
 #include <d3d11_1.h>
 #include <d3dcompiler.h>
 #include <assert.h>
-#include <string>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -40,12 +39,10 @@ namespace awesome {
     }
 
     void D3DRenderer::Render(unsigned long long deltaTimeMs) {
-        //std::string elapsedTimeStr = "elapsed " + std::to_string(deltaTimeMs) + "\n";
-        //OutputDebugStringA(elapsedTimeStr.c_str());
         CheckWindowResize();
         camera->UpdateCamera(deltaTimeMs);
         
-        float4x4 modelMat = rotateYMat(0.2f * static_cast<float>(M_PI * timeManager->GetCurrentTimeSec())); // Spin the quad
+        float4x4 modelMat = rotateYMat(0.0002f * static_cast<float>(M_PI * timeManager->GetCurrentTimeMs())); // Spin the quad
         float4x4 modelViewProj = modelMat * camera->GetViewMatrix() * camera->GetPerspectiveMatrix();
         {
             D3D11_MAPPED_SUBRESOURCE mappedSubresource;
@@ -374,7 +371,7 @@ namespace awesome {
 
     int D3DRenderer::CreateConstantBuffer() {
         D3D11_BUFFER_DESC constantBufferDesc = {};
-        constantBufferDesc.ByteWidth = sizeof(Constants) + 0xf & 0xfffffff0;
+        constantBufferDesc.ByteWidth = sizeof(Constants);
         constantBufferDesc.Usage = D3D11_USAGE_DYNAMIC;
         constantBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         constantBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;

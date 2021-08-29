@@ -21,7 +21,7 @@ namespace awesome {
 		LARGE_INTEGER perfCount;
 		QueryPerformanceCounter(&perfCount);
 		currentTimeTicks = perfCount.QuadPart;
-		unsigned long long deltaMs = (currentTimeTicks - prevTimeTicks) / ticksPerSec;
+		unsigned long long deltaMs = (currentTimeTicks - prevTimeTicks) * 1000ULL / ticksPerSec;
 		//deltaMs = std::max(deltaMs, 7ULL); /* make sure the first frame is at least 7 ms (144 FPS) */
 		return deltaMs;
 	}
@@ -34,10 +34,7 @@ namespace awesome {
 		return GetCurrentTimeTicks() * 1000ULL / ticksPerSec;
 	}
 
-	float TimeManager::GetCurrentTimeSec() const { 
-		unsigned long long ticks = GetCurrentTimeTicks();
-		float elapsedMS = ticks * 1000ULL / ticksPerSec;
-		float elapsedSec = static_cast<float> (ticks / ticksPerSec);
+	float TimeManager::GetCurrentTimeSec() const {
 		return static_cast<float> (GetCurrentTimeTicks() / ticksPerSec);
 	}
 
