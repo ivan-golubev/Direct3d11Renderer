@@ -52,5 +52,8 @@
     <ClInclude Include="Source\Camera.h">
       <Filter>Source</Filter>
     </ClInclude>
+    <ClInclude Include="Source\d3dx12.h">
+      <Filter>Source</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
