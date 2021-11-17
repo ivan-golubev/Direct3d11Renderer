@@ -1,11 +1,14 @@
 #if D3D11_ON_12
 
+/* Functions specific to D3D11on12 only */
+
 #include "D3DRenderer.h"
+#include <d3d11_1.h>
 #include <cassert>
 
 namespace awesome {
 
-	// Helper function for acquiring the first available hardware adapter that supports Direct3D 12.
+// Helper function for acquiring the first available hardware adapter that supports Direct3D 12.
 // If no such adapter can be found, *ppAdapter will be set to nullptr.
 	void GetHardwareAdapter(
 		IDXGIFactory1* pFactory,
@@ -146,6 +149,108 @@ namespace awesome {
 		assert(SUCCEEDED(hResult));
 		m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 		return 0;
+	}
+
+	int D3DRenderer::CreateD3D11Device() {
+		ID3D11DeviceContext* baseDeviceContext;
+		D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_0 };
+		UINT creationFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
+#if defined(_DEBUG)
+		creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
+#endif //_DEBUG
+
+		ComPtr<ID3D11Device> baseDevice;
+		HRESULT hResult = D3D11On12CreateDevice(
+			m_d3d12Device.Get(),
+			creationFlags,
+			nullptr,
+			0,
+			reinterpret_cast<IUnknown**>(m_commandQueue.GetAddressOf()),
+			1,
+			0,
+			&baseDevice,
+			&baseDeviceContext,
+			nullptr
+		);
+		assert(SUCCEEDED(hResult));
+
+		// Query the 11On12 device from the 11 device.
+		hResult = baseDevice.As(&m_d3d11On12Device);
+		assert(SUCCEEDED(hResult));
+
+		// Create descriptor heaps.
+		{
+			// Describe and create a render target view (RTV) descriptor heap.
+			D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
+			rtvHeapDesc.NumDescriptors = FrameCount;
+			rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
+			rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+			HRESULT hResult = m_d3d12Device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap));
+			assert(SUCCEEDED(hResult));
+			m_rtvDescriptorSize = m_d3d12Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+		}
+
+		if (FAILED(hResult)) {
+			MessageBoxA(0, "D3D11CreateDevice() failed", "Fatal Error", MB_OK);
+			return GetLastError();
+		}
+
+		// Get 1.1 interface of D3D11 Device and Context
+		hResult = baseDevice->QueryInterface(__uuidof(ID3D11Device1), (void**)&d3d11Device);
+		assert(SUCCEEDED(hResult));
+		baseDevice->Release();
+
+		hResult = baseDeviceContext->QueryInterface(__uuidof(ID3D11DeviceContext1), (void**)&d3d11DeviceContext);
+		assert(SUCCEEDED(hResult));
+		baseDeviceContext->Release();
+		return 0;
+	}
+
+	int D3DRenderer::CreateRenderTarget() {
+		// Create frame resources.
+		{
+			CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
+			ComPtr<ID3D12Resource> buffers[FrameCount];
+			// Create a RTV for each frame.
+			for (UINT n = 0; n < FrameCount; n++)
+			{
+				HRESULT hResult = m_swapChain->GetBuffer(n, IID_PPV_ARGS(&buffers[n]));
+				assert(SUCCEEDED(hResult));
+
+				// Create a wrapped 11On12 resource of this buffer.
+				D3D11_RESOURCE_FLAGS d3d11Flags = { D3D11_BIND_RENDER_TARGET };
+				hResult = m_d3d11On12Device->CreateWrappedResource(
+					buffers[n].Get(),
+					&d3d11Flags,
+					D3D12_RESOURCE_STATE_RENDER_TARGET,
+					D3D12_RESOURCE_STATE_PRESENT,
+					IID_PPV_ARGS(&m_wrappedBackBuffers[n])
+				);
+				assert(SUCCEEDED(hResult));
+
+				hResult = d3d11Device->CreateRenderTargetView(m_wrappedBackBuffers[n].Get(), 0, &m_d3d11RenderTargetViews[n]);
+				assert(SUCCEEDED(hResult));
+
+				rtvHandle.Offset(1, m_rtvDescriptorSize);
+			}
+		}
+		return 0;
+	}
+
+	void D3DRenderer::BeforeDraw() {
+		m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
+		// Acquire our wrapped render target resource for the current back buffer.
+		m_d3d11On12Device->AcquireWrappedResources(m_wrappedBackBuffers[m_frameIndex].GetAddressOf(), 1);
+	}
+
+	void D3DRenderer::AfterDraw() {
+		// Release our wrapped render target resource. Releasing 
+		// transitions the back buffer resource to the state specified
+		// as the OutState when the wrapped resource was created.
+		m_d3d11On12Device->ReleaseWrappedResources(m_wrappedBackBuffers[m_frameIndex].GetAddressOf(), 1);
+
+		// Flush to submit the 11 command list to the shared command queue.
+		d3d11DeviceContext->Flush();
 	}
 
 } // namespace awesome

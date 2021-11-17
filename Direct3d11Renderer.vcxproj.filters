@@ -27,6 +27,9 @@
     <ClCompile Include="Source\D3D11on12.cpp">
       <Filter>Source</Filter>
     </ClCompile>
+    <ClCompile Include="Source\D3D11vanilla.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <FxCompile Include="Shaders\basic_shaders.hlsl">

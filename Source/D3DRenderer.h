@@ -38,6 +38,8 @@ namespace awesome {
 	public:
 		void Init(HWND windowHandle, TimeManager* gm, InputManager* im, Camera* c);
 		void SetWindowsResized(bool value) { windowResized = value; };
+		void BeforeDraw();
+		void AfterDraw();
 		void Render(unsigned long long deltaTimeMs);
 
 	private:

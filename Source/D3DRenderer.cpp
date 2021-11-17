@@ -48,11 +48,7 @@ namespace awesome {
         CheckWindowResize();
         camera->UpdateCamera(deltaTimeMs);
 
-#if D3D11_ON_12
-        m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
-		// Acquire our wrapped render target resource for the current back buffer.
-		m_d3d11On12Device->AcquireWrappedResources(m_wrappedBackBuffers[m_frameIndex].GetAddressOf(), 1);
-#endif
+        BeforeDraw();
         
         float4x4 modelMat = rotateYMat(0.0002f * static_cast<float>(M_PI * timeManager->GetCurrentTimeMs())); // Spin the quad
         float4x4 modelViewProj = modelMat * camera->GetViewMatrix() * camera->GetPerspectiveMatrix();
@@ -64,17 +60,18 @@ namespace awesome {
             d3d11DeviceContext->Unmap(constantBuffer, 0);
         }
         FLOAT backgroundColor[4] = { 0.1f, 0.2f, 0.6f, 1.0f };
-#if D3D11_ON_12
+
         {
-            ID3D11RenderTargetView* RTV = m_d3d11RenderTargetViews[m_frameIndex].Get();
+            ID3D11RenderTargetView* RTV =
+#if D3D11_ON_12
+            m_d3d11RenderTargetViews[m_frameIndex].Get();
+#else
+            m_d3d11RenderTargetView;
+#endif
 			assert(RTV);
 			d3d11DeviceContext->OMSetRenderTargets(1, &RTV, nullptr);
 			d3d11DeviceContext->ClearRenderTargetView(RTV, backgroundColor);
         }
-#else
-		d3d11DeviceContext->OMSetRenderTargets(1, &m_d3d11RenderTargetView, nullptr);
-		d3d11DeviceContext->ClearRenderTargetView(m_d3d11RenderTargetView, backgroundColor);
-#endif
 
         RECT winRect;
         GetClientRect(windowHandle, &winRect);
@@ -97,15 +94,7 @@ namespace awesome {
 
         d3d11DeviceContext->Draw(numVerts, 0);
 
-#if D3D11_ON_12
-		// Release our wrapped render target resource. Releasing 
-        // transitions the back buffer resource to the state specified
-        // as the OutState when the wrapped resource was created.
-		m_d3d11On12Device->ReleaseWrappedResources(m_wrappedBackBuffers[m_frameIndex].GetAddressOf(), 1);
-
-		// Flush to submit the 11 command list to the shared command queue.
-        d3d11DeviceContext->Flush();
-#endif
+        AfterDraw();
 
         HRESULT hResult = m_swapChain->Present(1, 0);
         assert(SUCCEEDED(hResult));
@@ -145,72 +134,6 @@ namespace awesome {
         }
     }
 
-    int D3DRenderer::CreateD3D11Device() {
-        ID3D11DeviceContext* baseDeviceContext;
-        D3D_FEATURE_LEVEL featureLevels[] = { D3D_FEATURE_LEVEL_11_0 };
-        UINT creationFlags = D3D11_CREATE_DEVICE_BGRA_SUPPORT;
-#if defined(_DEBUG)
-        creationFlags |= D3D11_CREATE_DEVICE_DEBUG;
-#endif //_DEBUG
-
-#if D3D11_ON_12
-        ComPtr<ID3D11Device> baseDevice;
-		HRESULT hResult = D3D11On12CreateDevice(
-			m_d3d12Device.Get(),
-            creationFlags,
-			nullptr,
-			0,
-			reinterpret_cast<IUnknown**>(m_commandQueue.GetAddressOf()),
-			1,
-			0,
-			&baseDevice,
-			&baseDeviceContext,
-			nullptr
-		);
-        assert(SUCCEEDED(hResult));
-
-		// Query the 11On12 device from the 11 device.
-        hResult = baseDevice.As(&m_d3d11On12Device);
-        assert(SUCCEEDED(hResult));
-
-		// Create descriptor heaps.
-		{
-			// Describe and create a render target view (RTV) descriptor heap.
-			D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-			rtvHeapDesc.NumDescriptors = FrameCount;
-			rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-			rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-			HRESULT hResult = m_d3d12Device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap));
-			assert(SUCCEEDED(hResult));
-			m_rtvDescriptorSize = m_d3d12Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-	    }
-#else
-        ID3D11Device* baseDevice;
-        HRESULT hResult = D3D11CreateDevice(
-            0, D3D_DRIVER_TYPE_HARDWARE,
-            0, creationFlags,
-            featureLevels, ARRAYSIZE(featureLevels),
-            D3D11_SDK_VERSION, &baseDevice,
-            0, &baseDeviceContext
-        );
-#endif // !D3D11_ON_12
-
-        if (FAILED(hResult)) {
-            MessageBoxA(0, "D3D11CreateDevice() failed", "Fatal Error", MB_OK);
-            return GetLastError();
-        }
-
-        // Get 1.1 interface of D3D11 Device and Context
-        hResult = baseDevice->QueryInterface(__uuidof(ID3D11Device1), (void**)&d3d11Device);
-        assert(SUCCEEDED(hResult));
-        baseDevice->Release();
-
-        hResult = baseDeviceContext->QueryInterface(__uuidof(ID3D11DeviceContext1), (void**)&d3d11DeviceContext);
-        assert(SUCCEEDED(hResult));
-        baseDeviceContext->Release();
-        return 0;
-    }
-
     void D3DRenderer::SetupDebugLayer() {
 #if defined(_DEBUG)
         // Set up debug layer to break on D3D11 errors
@@ -228,102 +151,6 @@ namespace awesome {
             d3dDebug->Release();
         }
 #endif //_DEBUG
-    }
-
-#if !D3D11_ON_12
-    int D3DRenderer::CreateD3D11SwapChain() {
-        // Get DXGI Factory (needed to create Swap Chain)
-        IDXGIFactory2* dxgiFactory;
-        {
-            IDXGIDevice1* dxgiDevice;
-            HRESULT hResult = d3d11Device->QueryInterface(__uuidof(IDXGIDevice1), (void**)&dxgiDevice);
-            assert(SUCCEEDED(hResult));
-
-            IDXGIAdapter* dxgiAdapter;
-            hResult = dxgiDevice->GetAdapter(&dxgiAdapter);
-            assert(SUCCEEDED(hResult));
-            dxgiDevice->Release();
-
-            DXGI_ADAPTER_DESC adapterDesc;
-            dxgiAdapter->GetDesc(&adapterDesc);
-
-            OutputDebugStringA("Graphics Device: ");
-            OutputDebugStringW(adapterDesc.Description);
-            OutputDebugStringA("\n");
-
-            hResult = dxgiAdapter->GetParent(__uuidof(IDXGIFactory2), (void**)&dxgiFactory);
-            assert(SUCCEEDED(hResult));
-            dxgiAdapter->Release();
-        }
-
-        DXGI_SWAP_CHAIN_DESC1 d3d11SwapChainDesc = {};
-        d3d11SwapChainDesc.Width = 0; // use window width
-        d3d11SwapChainDesc.Height = 0; // use window height
-        d3d11SwapChainDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM_SRGB;
-        d3d11SwapChainDesc.SampleDesc.Count = 1;
-        d3d11SwapChainDesc.SampleDesc.Quality = 0;
-        d3d11SwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-        d3d11SwapChainDesc.BufferCount = 2;
-        d3d11SwapChainDesc.Scaling = DXGI_SCALING_STRETCH;
-        d3d11SwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
-        d3d11SwapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-        d3d11SwapChainDesc.Flags = 0;
-
-        HRESULT hResult = dxgiFactory->CreateSwapChainForHwnd(
-            d3d11Device,
-            windowHandle,
-            &d3d11SwapChainDesc,
-            0, 
-            0,
-            &m_swapChain
-        );
-        assert(SUCCEEDED(hResult));
-
-        dxgiFactory->Release();
-
-        return 0;
-    }
-#endif
-
-    int D3DRenderer::CreateRenderTarget() {
-#if D3D11_ON_12
-		// Create frame resources.
-		{
-			CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHandle(m_rtvHeap->GetCPUDescriptorHandleForHeapStart());
-			ComPtr<ID3D12Resource> buffers[FrameCount];
-			// Create a RTV for each frame.
-			for (UINT n = 0; n < FrameCount; n++)
-			{
-				HRESULT hResult = m_swapChain->GetBuffer(n, IID_PPV_ARGS(&buffers[n]));
-				assert(SUCCEEDED(hResult));
-
-				// Create a wrapped 11On12 resource of this buffer.
-				D3D11_RESOURCE_FLAGS d3d11Flags = { D3D11_BIND_RENDER_TARGET };
-				hResult = m_d3d11On12Device->CreateWrappedResource(
-					buffers[n].Get(),
-					&d3d11Flags,
-					D3D12_RESOURCE_STATE_RENDER_TARGET,
-					D3D12_RESOURCE_STATE_PRESENT,
-					IID_PPV_ARGS(&m_wrappedBackBuffers[n])
-				);
-                assert(SUCCEEDED(hResult));
-
-				hResult = d3d11Device->CreateRenderTargetView(m_wrappedBackBuffers[n].Get(), 0, &m_d3d11RenderTargetViews[n]);
-				assert(SUCCEEDED(hResult));
-
-				rtvHandle.Offset(1, m_rtvDescriptorSize);
-	        }
-		}
-#else
-        ID3D11Texture2D* d3d11FrameBuffer;
-        HRESULT hResult = m_swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&d3d11FrameBuffer);
-        assert(SUCCEEDED(hResult));
-
-        hResult = d3d11Device->CreateRenderTargetView(d3d11FrameBuffer, 0, &m_d3d11RenderTargetView);
-        assert(SUCCEEDED(hResult));
-        d3d11FrameBuffer->Release();
-#endif
-        return 0;
     }
 
     ID3DBlob* D3DRenderer::CreateVertexShader() {

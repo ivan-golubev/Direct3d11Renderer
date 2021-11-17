@@ -185,6 +185,7 @@ XCOPY "$(ProjectDir)Shaders\" "$(TargetDir)Shaders" /S /Y /I</Command>
   <ItemGroup>
     <ClCompile Include="Source\Camera.cpp" />
     <ClCompile Include="Source\D3D11on12.cpp" />
+    <ClCompile Include="Source\D3D11vanilla.cpp" />
     <ClCompile Include="Source\D3DRenderer.cpp" />
     <ClCompile Include="Source\TimeManager.cpp" />
     <ClCompile Include="Source\InputManager.cpp" />
