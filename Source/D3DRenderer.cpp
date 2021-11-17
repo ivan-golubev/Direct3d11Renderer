@@ -67,13 +67,13 @@ namespace awesome {
 #if D3D11_ON_12
         {
             ID3D11RenderTargetView* RTV = m_d3d11RenderTargetViews[m_frameIndex].Get();
-            assert(RTV);
-			d3d11DeviceContext->ClearRenderTargetView(RTV, backgroundColor);
+			assert(RTV);
 			d3d11DeviceContext->OMSetRenderTargets(1, &RTV, nullptr);
+			d3d11DeviceContext->ClearRenderTargetView(RTV, backgroundColor);
         }
 #else
+		d3d11DeviceContext->OMSetRenderTargets(1, &m_d3d11RenderTargetView, nullptr);
 		d3d11DeviceContext->ClearRenderTargetView(m_d3d11RenderTargetView, backgroundColor);
-        d3d11DeviceContext->OMSetRenderTargets(1, &m_d3d11RenderTargetView, nullptr);
 #endif
 
         RECT winRect;
@@ -114,11 +114,8 @@ namespace awesome {
     void D3DRenderer::CheckWindowResize() {
         if (windowResized)
         {
-     /*       d3d11DeviceContext->OMSetRenderTargets(0, 0, 0);
+            d3d11DeviceContext->OMSetRenderTargets(0, 0, 0);
 #if D3D11_ON_12
-			for (int i = 0; i < FrameCount; ++i) {
-				m_d3d11RenderTargetViews[i]->Release();
-			}
             CreateRenderTarget();
 #else
             m_d3d11RenderTargetView->Release();
@@ -132,7 +129,7 @@ namespace awesome {
 			res = d3d11Device->CreateRenderTargetView(d3d11FrameBuffer, NULL, &m_d3d11RenderTargetView);
 			assert(SUCCEEDED(res));
 			d3d11FrameBuffer->Release();
-#endif*/
+#endif
             // Get window dimensions
             int windowWidth, windowHeight;
             float windowAspectRatio;
@@ -465,7 +462,7 @@ namespace awesome {
 		}
 #else
         ID3D11Texture2D* d3d11FrameBuffer;
-        HRESULT hResult = m_swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&d3d11FrameBuffer); // <- this interface no longer exists in dx12
+        HRESULT hResult = m_swapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (void**)&d3d11FrameBuffer);
         assert(SUCCEEDED(hResult));
 
         hResult = d3d11Device->CreateRenderTargetView(d3d11FrameBuffer, 0, &m_d3d11RenderTargetView);
