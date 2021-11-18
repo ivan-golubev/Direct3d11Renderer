@@ -190,11 +190,6 @@ namespace awesome {
 			m_rtvDescriptorSize = m_d3d12Device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 		}
 
-		if (FAILED(hResult)) {
-			MessageBoxA(0, "D3D11CreateDevice() failed", "Fatal Error", MB_OK);
-			return GetLastError();
-		}
-
 		// Get 1.1 interface of D3D11 Device and Context
 		hResult = baseDevice->QueryInterface(__uuidof(ID3D11Device1), (void**)&d3d11Device);
 		assert(SUCCEEDED(hResult));
