@@ -32,6 +32,7 @@ namespace awesome {
 		void Render(unsigned long long deltaTimeMs);
 
 	private:
+		void InitImGUI(HWND windowHandle);
 		int RegisterDirect3DDevice();
 		void SetupDebugLayer();
 		int CreateSwapChain();
@@ -45,6 +46,9 @@ namespace awesome {
 		int CreateConstantBuffer();
 		int CreateRasterizerState();
 		void CheckWindowResize();
+
+		void RenderUI();
+		void ImGuiButtonPressed();
 
 		HWND windowHandle{ nullptr };
 		ID3D11Device1* d3d11Device{ nullptr };

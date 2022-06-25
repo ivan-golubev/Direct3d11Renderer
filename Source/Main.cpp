@@ -8,6 +8,9 @@
 #include "InputManager.h"
 #include "Camera.h"
 
+#include <iostream>
+#include <fstream>
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void MainLoop();
 
@@ -16,8 +19,18 @@ awesome::D3DRenderer renderer{};
 awesome::InputManager inputManager{};
 awesome::Camera camera{ &inputManager };
 
+void SetFileOutput()
+{
+    std::ofstream* file = new std::ofstream();
+    file->open("cout.txt");
+    std::streambuf* sbuf = std::cout.rdbuf();
+    std::cout.rdbuf(file->rdbuf());
+}
+
 int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance*/, _In_ LPWSTR /*lpCmdLine*/, _In_ int nShowCmd)
 {
+    //SetFileOutput();
+
     const wchar_t CLASS_NAME[] = L"Direct 3D 11 renderer";
     /* register a windows class */
     WNDCLASSEXW winClass = {};
@@ -61,11 +74,16 @@ int WINAPI wWinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE /*hPrevInstance
     return 0;
 }
 
+extern LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    LRESULT result = ImGui_ImplWin32_WndProcHandler(hwnd, uMsg, wParam, lParam);
+    if (result)
+        return result;
+
     LPCREATESTRUCT a = LPCREATESTRUCT(lParam);
 
-    LRESULT result = 0;
     switch (uMsg)
     {
     case WM_DESTROY:

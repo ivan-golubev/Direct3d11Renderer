@@ -5,6 +5,13 @@
 #include <d3dcompiler.h>
 #include <assert.h>
 
+#include <string>
+#include <iostream>
+
+#include <imgui.h>
+#include <backends/imgui_impl_win32.h>
+#include <backends/imgui_impl_dx11.h>
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 #include "TimeManager.h"
@@ -36,6 +43,17 @@ namespace awesome {
         CreateSamplerState();
         CreateConstantBuffer();
         CreateRasterizerState();
+        InitImGUI(windowHandle);
+    }
+
+    void D3DRenderer::InitImGUI(HWND windowHandle)
+    {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        ImGui_ImplWin32_Init(windowHandle);
+        ImGui_ImplDX11_Init(d3d11Device, d3d11DeviceContext);
+        ImGui::StyleColorsDark();
     }
 
     void D3DRenderer::Render(unsigned long long deltaTimeMs) {
@@ -76,8 +94,42 @@ namespace awesome {
 
         d3d11DeviceContext->Draw(numVerts, 0);
 
+        RenderUI();
+
         d3d11SwapChain->Present(1, 0);
-    }    
+    }
+
+    void D3DRenderer::ImGuiButtonPressed()
+    {
+        std::cout << "ImGuiButtonPressed()" << '\n';
+    }
+
+    void D3DRenderer::RenderUI()
+    {
+        ImGui_ImplDX11_NewFrame();
+        ImGui_ImplWin32_NewFrame();
+        ImGui::NewFrame();
+
+        ImGui::Begin("Test");
+
+        ImGui::Text("Hello, world %d", 123);
+        if (ImGui::Button("Save"))
+            ImGuiButtonPressed();
+
+        std::string inputStr{};
+        inputStr.reserve(25);
+        float inputFloat{};
+
+        ImGui::InputText("string", inputStr.data(), inputStr.size());
+        ImGui::SliderFloat("float", &inputFloat, 0.0f, 1.0f);
+
+        std::cout << "Input string: " << inputStr << ' ' << "Input float: " << std::to_string(inputFloat) << '\n';
+
+        ImGui::End();
+        ImGui::Render();
+
+        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    }
 
     void D3DRenderer::CheckWindowResize() {
         if (windowResized)
